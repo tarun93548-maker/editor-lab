@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor Lab</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0a0a0a;
+            --card: #111111;
+            --card-border: #1a1a1a;
+            --accent: #e8ff47;
+            --accent-dim: rgba(232, 255, 71, 0.15);
+            --text: #e5e5e5;
+            --text-dim: #777;
+            --text-muted: #555;
+            --success: #22c55e;
+            --error: #ef4444;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        h1, h2, h3, h4 { font-family: 'Inter', sans-serif; font-weight: 700; }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header */
+        header {
+            padding: 24px 0;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .header-inner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+        .logo-text {
+            font-family: 'Inter', sans-serif;
+            font-weight: 800;
+            font-size: 18px;
+            color: #fff;
+        }
+        .badge {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            background: var(--accent-dim);
+            color: var(--accent);
+            padding: 4px 10px;
+            border-radius: 100px;
+        }
+
+        .header-spacer { margin-left: auto; }
+
+        .toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toggle-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        .toggle-label.on { color: var(--accent); }
+        .toggle-switch {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            background: var(--card-border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .toggle-switch.active { background: var(--accent); }
+        .toggle-switch .toggle-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .toggle-switch.active .toggle-knob { transform: translateX(16px); }
+
+        /* Sections */
+        section { padding: 48px 0; display: none; }
+        section.active { display: block; }
+        .hidden { display: none !important; }
+
+        /* Upload Section */
+        .hero-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 32px;
+            color: #fff;
+        }
+        .hero-text span { color: var(--accent); }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 640px) {
+            .upload-grid { grid-template-columns: 1fr; }
+        }
+
+        .upload-card {
+            background: var(--card);
+            border: 2px dashed var(--card-border);
+            border-radius: var(--radius);
+            padding: 32px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .upload-card:hover, .upload-card.dragover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+        .upload-card.has-file {
+            border-color: var(--success);
+            border-style: solid;
+        }
+
+        .upload-card .icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            opacity: 0.6;
+        }
+        .upload-card .label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .upload-card .sublabel {
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+        .upload-card .file-name {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--accent);
+            word-break: break-all;
+        }
+
+        .url-input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            margin-top: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .url-input:focus { border-color: var(--accent); }
+        .url-input::placeholder { color: var(--text-muted); }
+
+        .process-btn {
+            display: block;
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            padding: 14px 24px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: var(--radius);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .process-btn:hover { opacity: 0.9; }
+        .process-btn:active { transform: scale(0.98); }
+        .process-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Progress Section */
+        .progress-wrapper {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 32px;
+        }
+        .progress-bar-track {
+            width: 100%;
+            height: 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .progress-pct {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 800;
+            font-family: 'Inter', sans-serif;
+            color: var(--accent);
+            margin-bottom: 24px;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        @media (max-width: 640px) {
+            .steps { grid-template-columns: repeat(2, 1fr); }
+        }
+        .step {
+            text-align: center;
+            padding: 12px 8px;
+            border-radius: 8px;
+            background: var(--bg);
+            font-size: 11px;
+            color: var(--text-muted);
+            transition: all 0.3s;
+        }
+        .step .step-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            margin: 0 auto 8px;
+            transition: all 0.3s;
+        }
+        .step.active { color: var(--accent); }
+        .step.active .step-dot { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+        .step.done { color: var(--success); }
+        .step.done .step-dot { background: var(--success); }
+
+        /* Results Section */
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .results-header h2 { font-size: 22px; color: #fff; }
+
+        .new-video-btn {
+            padding: 8px 20px;
+            background: transparent;
+            color: var(--text-dim);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .new-video-btn:hover { color: #fff; border-color: #fff; }
+
+        .variations-grid {
+            display: grid;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .var-card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .var-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .var-num {
+            width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--accent);
+            color: #000;
+            font-family: 'Inter', sans-serif;
+            font-weight: 800;
+            font-size: 14px;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+        .var-title {
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 15px;
+            color: #fff;
+        }
+        .hook-badge {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            background: var(--accent-dim);
+            color: var(--accent);
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .var-card-body { padding: 16px 20px; }
+        .var-strategy {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .var-preview {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        .var-preview .ellipsis { color: var(--text-muted); }
+
+        .expand-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: transparent;
+            color: var(--text-dim);
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+        .expand-btn:hover { color: #fff; border-color: #fff; }
+
+        .script-full {
+            margin-bottom: 16px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease;
+        }
+        .script-full.expanded {
+            max-height: 2000px;
+        }
+        .script-list { list-style: none; margin-bottom: 16px; }
+        .script-item {
+            display: flex;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            align-items: flex-start;
+        }
+        .script-item:last-child { border-bottom: none; }
+        .script-item.hook-row { background: var(--accent-dim); border-radius: 4px; padding-left: 8px; }
+        .script-item.hook-row .script-text { color: var(--accent); }
+        .script-order {
+            color: var(--text-muted);
+            font-size: 11px;
+            min-width: 24px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .script-time {
+            color: var(--accent);
+            font-size: 11px;
+            white-space: nowrap;
+            min-width: 90px;
+            opacity: 0.7;
+            padding-top: 1px;
+        }
+        .script-content { flex: 1; }
+        .script-text { color: var(--text); display: block; }
+
+        .section-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-bottom: 3px;
+        }
+        .section-badge.hook      { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .section-badge.intro     { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+        .section-badge.problem   { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+        .section-badge.product   { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .section-badge.benefit   { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+        .section-badge.social_proof { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+        .section-badge.cta       { background: rgba(232, 255, 71, 0.2); color: var(--accent); }
+        .section-badge.payoff    { background: rgba(244, 114, 182, 0.2); color: #f472b6; }
+
+        .done-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--success);
+            margin-right: 10px;
+        }
+
+        .why-list {
+            list-style: none;
+            margin-bottom: 16px;
+        }
+        .why-item {
+            font-size: 11px;
+            color: var(--text-dim);
+            padding: 3px 0;
+        }
+        .why-item::before {
+            content: ">";
+            color: var(--accent);
+            margin-right: 6px;
+            opacity: 0.5;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+        .download-btn:hover { opacity: 0.85; }
+
+        .render-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .render-btn:hover { background: var(--accent); color: #000; }
+        .render-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: transparent;
+            color: var(--accent);
+        }
+        .render-btn.rendering {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .var-error {
+            font-size: 12px;
+            color: var(--error);
+            padding: 8px 12px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 6px;
+        }
+
+        /* Transcript toggle */
+        .transcript-section {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .transcript-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .transcript-toggle:hover { color: #fff; }
+        .transcript-toggle .arrow { transition: transform 0.2s; }
+        .transcript-toggle.open .arrow { transform: rotate(180deg); }
+        .transcript-body {
+            padding: 0 20px 20px;
+            font-size: 12px;
+            line-height: 1.8;
+            color: var(--text-dim);
+            white-space: pre-wrap;
+        }
+
+        /* Preview Section */
+        .preview-wrapper {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+        .preview-wrapper h3 {
+            font-size: 16px;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .preview-subtitle {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+        .preview-stats {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+        .preview-stats strong { color: var(--accent); }
+        .preview-player {
+            width: 100%;
+            max-height: 480px;
+            border-radius: 8px;
+            background: #000;
+            margin-bottom: 16px;
+        }
+        .preview-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .preview-continue-btn {
+            padding: 12px 24px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: var(--radius);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .preview-continue-btn:hover { opacity: 0.9; }
+        .preview-note {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Error Section */
+        .error-box {
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+        }
+        .error-box h3 {
+            color: var(--error);
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        .error-box p {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-inner">
+            <div class="logo"></div>
+            <span class="logo-text">Editor Lab</span>
+            <span class="badge">UGC &rarr; AD ENGINE</span>
+            <span class="header-spacer"></span>
+            <div class="toggle-wrap">
+                <span class="toggle-label" id="preview-label">Preview Mode</span>
+                <div class="toggle-switch" id="preview-toggle">
+                    <div class="toggle-knob"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Upload Section -->
+    <section id="sec-upload" class="container active">
+        <h1 class="hero-text">Turn raw UGC into<br><span>TikTok-ready ads</span></h1>
+
+        <div class="upload-grid">
+            <div class="upload-card" id="drop-zone">
+                <div class="icon">&#128193;</div>
+                <div class="label">Upload Video File</div>
+                <div class="sublabel">Drag & drop or click &mdash; MP4, MOV, AVI, MKV, WEBM</div>
+                <div class="file-name hidden" id="file-name"></div>
+                <input type="file" id="file-input" accept=".mp4,.mov,.avi,.mkv,.webm" style="display:none">
+            </div>
+
+            <div class="upload-card" id="url-card">
+                <div class="icon">&#128279;</div>
+                <div class="label">Paste Video URL</div>
+                <div class="sublabel">Google Drive link or direct video URL</div>
+                <input type="text" class="url-input" id="url-input" placeholder="https://...">
+            </div>
+        </div>
+
+        <button class="process-btn" id="process-btn" disabled>Process Video &rarr;</button>
+    </section>
+
+    <!-- Progress Section -->
+    <section id="sec-progress" class="container">
+        <div class="progress-wrapper">
+            <div class="progress-pct" id="progress-pct">0%</div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="progress-fill"></div>
+            </div>
+            <div class="steps">
+                <div class="step" id="step-transcribe">
+                    <div class="step-dot"></div>
+                    Transcribing
+                </div>
+                <div class="step" id="step-silence">
+                    <div class="step-dot"></div>
+                    Removing silence
+                </div>
+                <div class="step" id="step-generate">
+                    <div class="step-dot"></div>
+                    Generating variations
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Preview Section -->
+    <section id="sec-preview" class="container">
+        <div class="preview-wrapper">
+            <h3>Preview: Silence Removed</h3>
+            <p class="preview-subtitle">Review the cleaned video before continuing.</p>
+            <div class="preview-stats" id="preview-stats"></div>
+            <video class="preview-player" id="preview-player" controls></video>
+            <div class="preview-actions">
+                <button class="preview-continue-btn" id="preview-continue-btn">Looks good, continue &rarr;</button>
+                <button class="new-video-btn" id="preview-start-over">&larr; Start over</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results Section -->
+    <section id="sec-results" class="container">
+        <div class="results-header">
+            <h2>Hook Variations</h2>
+            <button class="new-video-btn" id="new-video-btn">&larr; New video</button>
+        </div>
+
+        <div class="variations-grid" id="variations-grid"></div>
+
+        <div class="transcript-section" id="transcript-section">
+            <button class="transcript-toggle" id="transcript-toggle">
+                Full Transcript
+                <span class="arrow">&#9660;</span>
+            </button>
+            <div class="transcript-body hidden" id="transcript-body"></div>
+        </div>
+    </section>
+
+    <!-- Error Section -->
+    <section id="sec-error" class="container">
+        <div class="error-box">
+            <h3>Something went wrong</h3>
+            <p id="error-message"></p>
+            <button class="new-video-btn" id="error-retry-btn">&larr; Try again</button>
+        </div>
+    </section>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "editor-lab-remotion",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
+    "@remotion/media-utils": "^4.0.0",
+    "remotion": "^4.0.0",
+    "express": "^4.18.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/s3-request-presigner": "^3.500.0",
+    "uuid": "^9.0.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/react": "^18.2.0",
+    "@types/uuid": "^9.0.7",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.3.0"
+  }
+}
