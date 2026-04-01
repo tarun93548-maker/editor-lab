@@ -1,4 +1,4 @@
-"""Burn captions onto video using SRT subtitles filter."""
+"""Burn captions onto video using FFmpeg drawtext filters via filter_script."""
 import os
 import shutil
 import subprocess
@@ -7,27 +7,27 @@ from typing import Dict, List
 
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
-# Font config: maps caption style name to SRT/ASS rendering params.
+# Font config: maps caption style name to drawtext rendering params.
 # "file" is the .ttf filename in fonts/ (None = system font).
-# "size" is the ASS/SRT fontsize for 1080x1920.
+# "size" is the drawtext fontsize for 1080x1920.
 FONT_CONFIG: Dict[str, Dict] = {
-    "Georgia":          {"file": None,                        "size": 24, "uppercase": False},
-    "Playfair Display": {"file": "PlayfairDisplay-Bold.ttf",  "size": 23, "uppercase": False},
-    "Bebas Neue":       {"file": "BebasNeue-Regular.ttf",     "size": 28, "uppercase": True},
-    "Poppins":          {"file": "Poppins-SemiBold.ttf",      "size": 22, "uppercase": False},
-    "Dancing Script":   {"file": "DancingScript-Bold.ttf",    "size": 27, "uppercase": False},
-    "Oswald":           {"file": "Oswald-Medium.ttf",         "size": 24, "uppercase": True},
-    "Permanent Marker": {"file": "PermanentMarker-Regular.ttf", "size": 21, "uppercase": False},
-    "Abril Fatface":    {"file": "AbrilFatface-Regular.ttf",  "size": 23, "uppercase": False},
-    "Quicksand":        {"file": "Quicksand-SemiBold.ttf",    "size": 23, "uppercase": False},
-    "Lobster":          {"file": "Lobster-Regular.ttf",       "size": 24, "uppercase": False},
-    "Lora":             {"file": "Lora-Regular.ttf",          "size": 23, "uppercase": False},
-    "Inter":            {"file": "Inter-Regular.ttf",         "size": 23, "uppercase": False},
-    "Montserrat":       {"file": "Montserrat-Regular.ttf",    "size": 22, "uppercase": False},
-    "DM Sans":          {"file": "DMSans-Regular.ttf",        "size": 23, "uppercase": False},
-    "Nunito":           {"file": "Nunito-Regular.ttf",        "size": 22, "uppercase": False},
-    "Raleway":          {"file": "Raleway-Bold.ttf",          "size": 23, "uppercase": False},
-    "Outfit":           {"file": "Outfit-Regular.ttf",        "size": 23, "uppercase": False},
+    "Georgia":          {"file": None,                        "size": 42, "uppercase": False},
+    "Playfair Display": {"file": "PlayfairDisplay-Bold.ttf",  "size": 40, "uppercase": False},
+    "Bebas Neue":       {"file": "BebasNeue-Regular.ttf",     "size": 48, "uppercase": True},
+    "Poppins":          {"file": "Poppins-SemiBold.ttf",      "size": 38, "uppercase": False},
+    "Dancing Script":   {"file": "DancingScript-Bold.ttf",    "size": 46, "uppercase": False},
+    "Oswald":           {"file": "Oswald-Medium.ttf",         "size": 42, "uppercase": True},
+    "Permanent Marker": {"file": "PermanentMarker-Regular.ttf", "size": 37, "uppercase": False},
+    "Abril Fatface":    {"file": "AbrilFatface-Regular.ttf",  "size": 39, "uppercase": False},
+    "Quicksand":        {"file": "Quicksand-SemiBold.ttf",    "size": 39, "uppercase": False},
+    "Lobster":          {"file": "Lobster-Regular.ttf",       "size": 42, "uppercase": False},
+    "Lora":             {"file": "Lora-Regular.ttf",          "size": 40, "uppercase": False},
+    "Inter":            {"file": "Inter-Regular.ttf",         "size": 39, "uppercase": False},
+    "Montserrat":       {"file": "Montserrat-Regular.ttf",    "size": 38, "uppercase": False},
+    "DM Sans":          {"file": "DMSans-Regular.ttf",        "size": 39, "uppercase": False},
+    "Nunito":           {"file": "Nunito-Regular.ttf",        "size": 38, "uppercase": False},
+    "Raleway":          {"file": "Raleway-Bold.ttf",          "size": 39, "uppercase": False},
+    "Outfit":           {"file": "Outfit-Regular.ttf",        "size": 39, "uppercase": False},
 }
 
 GEORGIA_FALLBACK = FONT_CONFIG["Georgia"]
@@ -38,31 +38,77 @@ def get_font_config(caption_style: str) -> Dict:
     return FONT_CONFIG.get(caption_style, GEORGIA_FALLBACK)
 
 
-def _ffmpeg_path(path: str) -> str:
-    """Convert a filesystem path to FFmpeg-safe forward-slash format."""
-    return path.replace("\\", "/")
+def _escape_drawtext(text: str) -> str:
+    """Escape text for FFmpeg drawtext filter."""
+    text = text.replace("\\", "\\\\")
+    text = text.replace("'", "\u2019")
+    text = text.replace(":", "\\:")
+    text = text.replace(";", "\\;")
+    text = text.replace("[", "\\[")
+    text = text.replace("]", "\\]")
+    text = text.replace("%", "%%")
+    return text
 
 
-def _format_srt_time(seconds: float) -> str:
-    """Convert seconds to SRT timestamp format HH:MM:SS,mmm."""
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    ms = int(round((seconds % 1) * 1000))
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+def _ffmpeg_fontpath(font_file: str) -> str:
+    """Build an FFmpeg-safe font file path with escaped colon for Windows drive letter."""
+    full = os.path.join(FONTS_DIR, font_file)
+    # Forward slashes, escape colon for filter parser: C\:/Users/...
+    return full.replace("\\", "/").replace(":", "\\:")
 
 
-def _generate_srt(captions: List[Dict], uppercase: bool) -> str:
-    """Generate SRT subtitle content from caption chunks."""
-    lines = []
-    for i, cap in enumerate(captions, 1):
+def _build_filter_chain(
+    captions: List[Dict],
+    font_config: Dict,
+) -> str:
+    """Build a drawtext filter chain string for all caption chunks."""
+    font_file = font_config.get("file")
+    fontsize = font_config["size"]
+    uppercase = font_config.get("uppercase", False)
+
+    # Resolve font: use fontfile= for custom fonts, font= for system Georgia
+    use_fontfile = False
+    fontpath = ""
+    if font_file:
+        full_path = os.path.join(FONTS_DIR, font_file)
+        if os.path.isfile(full_path):
+            fontpath = _ffmpeg_fontpath(font_file)
+            use_fontfile = True
+            print(f"[FFmpeg] Using fontfile: {full_path} (exists: True)")
+        else:
+            print(f"[FFmpeg] Warning: font not found: {full_path}, falling back to system Georgia")
+    if not use_fontfile:
+        print(f"[FFmpeg] Using system font: Georgia")
+
+    filters = []
+    for cap in captions:
         text = cap["text"]
         if uppercase:
             text = text.upper()
-        start = _format_srt_time(cap["start"])
-        end = _format_srt_time(cap["end"])
-        lines.append(f"{i}\n{start} --> {end}\n{text}\n")
-    return "\n".join(lines)
+        text = _escape_drawtext(text)
+
+        start = f"{cap['start']:.3f}"
+        end = f"{cap['end']:.3f}"
+
+        if use_fontfile:
+            font_part = f"fontfile='{fontpath}'"
+        else:
+            font_part = "font='Georgia'"
+
+        dt = (
+            f"drawtext={font_part}"
+            f":fontsize={fontsize}"
+            f":fontcolor=white"
+            f":borderw=2"
+            f":bordercolor=black"
+            f":x=(w-text_w)/2"
+            f":y=h*0.62"
+            f":text='{text}'"
+            f":enable='between(t,{start},{end})'"
+        )
+        filters.append(dt)
+
+    return ",".join(filters)
 
 
 def burn_captions(
@@ -73,7 +119,7 @@ def burn_captions(
     width: int = 1080,
     height: int = 1920,
 ) -> None:
-    """Burn caption chunks onto a video using SRT subtitles."""
+    """Burn caption chunks onto a video using drawtext filters via filter_script."""
     if not captions:
         shutil.copy2(video_path, output_path)
         return
@@ -87,61 +133,25 @@ def burn_captions(
     for i in range(len(captions) - 1):
         captions[i]["end"] = captions[i + 1]["start"] - 0.033
 
-    uppercase = font_config.get("uppercase", False)
-    srt_content = _generate_srt(captions, uppercase)
+    filter_chain = _build_filter_chain(captions, font_config)
 
-    # Resolve font name for force_style
-    font_file = font_config.get("file")
-    font_name = "Georgia"
-    fontsdir = ""
-    if font_file:
-        # Use the caption style display name (key in FONT_CONFIG)
-        for style_name, cfg in FONT_CONFIG.items():
-            if cfg.get("file") == font_file:
-                font_name = style_name
-                break
-        fontsdir = _ffmpeg_path(FONTS_DIR)
-
-    fontsize = font_config["size"]
-    force_style = (
-        f"FontName={font_name},"
-        f"FontSize={fontsize},"
-        f"PrimaryColour=&H00FFFFFF,"
-        f"OutlineColour=&H00000000,"
-        f"Outline=2,"
-        f"Alignment=2,"
-        f"MarginV=730,"
-        f"Bold=0"
-    )
-
-    # Write SRT to same directory as input video so we can reference
-    # it by bare filename — avoids Windows colon-in-path breaking
-    # FFmpeg's filter option parser.
-    video_dir = os.path.dirname(os.path.abspath(video_path))
-    srt_fd, srt_path = tempfile.mkstemp(suffix=".srt", prefix="editorlab_", dir=video_dir)
-    srt_filename = os.path.basename(srt_path)
+    # Write filter chain to a temp file — avoids command-line length limits
+    # and keeps all drawtext entries out of the shell argument.
+    script_fd, script_path = tempfile.mkstemp(suffix=".txt", prefix="editorlab_vf_")
     try:
-        with os.fdopen(srt_fd, "w", encoding="utf-8") as f:
-            f.write(srt_content)
-
-        if fontsdir:
-            vf = f"subtitles={srt_filename}:fontsdir={fontsdir}:force_style='{force_style}'"
-        else:
-            vf = f"subtitles={srt_filename}:force_style='{force_style}'"
+        with os.fdopen(script_fd, "w", encoding="utf-8") as f:
+            f.write(filter_chain)
 
         video_abs = os.path.abspath(video_path)
         output_abs = os.path.abspath(output_path)
-        cmd = f'ffmpeg -y -i "{video_abs}" -vf "{vf}" -c:v libx264 -preset fast -crf 18 -c:a copy "{output_abs}"'
+        script_abs = os.path.abspath(script_path)
+
+        cmd = f'ffmpeg -y -i "{video_abs}" -filter_script:v "{script_abs}" -c:v libx264 -preset fast -crf 18 -c:a copy "{output_abs}"'
 
         # Debug logging
-        print(f"[FFmpeg] Burning captions: {len(captions)} chunks, font={font_name}")
-        print(f"[FFmpeg] SRT file: {srt_path}")
-        print(f"[FFmpeg] SRT exists: {os.path.isfile(srt_path)}, size: {os.path.getsize(srt_path)} bytes")
-        print(f"[FFmpeg] SRT filename in filter: {srt_filename}")
-        print(f"[FFmpeg] cwd: {video_dir}")
-        srt_preview = srt_content.split("\n")[:5]
-        print(f"[FFmpeg] SRT first 5 lines: {srt_preview}")
-        print(f"[FFmpeg] -vf: {vf}")
+        font_file = font_config.get("file", "Georgia.ttf")
+        print(f"[FFmpeg] Burning captions: {len(captions)} chunks, font={font_file}")
+        print(f"[FFmpeg] Filter script: {script_path} ({os.path.getsize(script_path)} bytes)")
         print(f"[FFmpeg] Full command: {cmd}")
         result = subprocess.run(
             cmd,
@@ -149,7 +159,6 @@ def burn_captions(
             capture_output=True,
             text=True,
             timeout=600,
-            cwd=video_dir,
         )
 
         if result.returncode != 0:
@@ -160,6 +169,6 @@ def burn_captions(
 
     finally:
         try:
-            os.unlink(srt_path)
+            os.unlink(script_path)
         except OSError:
             pass

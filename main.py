@@ -221,7 +221,15 @@ def _build_segments(variation: dict, job: dict) -> List[Dict]:
         seg_idx = entry.get("audible_segment_index")
         if seg_idx is not None and audible_segments:
             aseg = audible_segments[seg_idx]
-            return (max(groq_start, aseg["start"]), min(groq_end, aseg["end"]))
+            cs = max(groq_start, aseg["start"])
+            ce = min(groq_end, aseg["end"])
+            if ce > cs:
+                return (cs, ce)
+            # Clamped duration is negative/zero — mapping is off.
+            # Fall through to raw Groq timestamps instead of remapping
+            # to a different segment (which could be wrong).
+            print(f"  [CLAMP] Negative clamp for audible[{seg_idx}], "
+                  f"using raw groq: {groq_start:.3f}-{groq_end:.3f}")
         return (groq_start, groq_end)
 
     first_sent_idx = script[0].get("sentence_index", 0) if script else 0
@@ -240,14 +248,26 @@ def _build_segments(variation: dict, job: dict) -> List[Dict]:
         body_start, _ = _clamp(script[0])
         segments.append({"start": body_start, "end": clean_end})
     else:
-        HOOK_END_PAD = 0.03  # 30ms breathing room for last word
-        hook_entry = script[0]
-        hook_start, hook_end = _clamp(hook_entry)
-        # Pad hook end so the last word isn't cut off by the silence boundary.
-        # Skip padding for the last sentence — it has natural trailing audio.
-        hook_sent_idx = hook_entry.get("sentence_index", 0)
-        if hook_sent_idx < len(all_sentences) - 1:
-            hook_end = min(hook_end + HOOK_END_PAD, clean_end)
+        # Collect ALL hook sentences — not just the first one.
+        hook_entries = [e for e in script if e.get("section") == "hook"]
+        if not hook_entries:
+            hook_entries = [script[0]]
+
+        # Clamp each hook entry and find the overall span.
+        hook_start = float("inf")
+        hook_end = 0.0
+        for entry in hook_entries:
+            cs, ce = _clamp(entry)
+            hook_start = min(hook_start, cs)
+            hook_end = max(hook_end, ce)
+            print(f"  [HOOK DEBUG] hook sentence: idx={entry.get('sentence_index','?')} "
+                  f"seg={entry.get('audible_segment_index','?')} "
+                  f"groq={float(entry['start']):.3f}-{float(entry['end']):.3f} "
+                  f"clamped={cs:.3f}-{ce:.3f} "
+                  f"\"{entry.get('text','')[:50]}\"")
+        print(f"  [HOOK DEBUG] combined hook span: {hook_start:.3f}-{hook_end:.3f} "
+              f"({len(hook_entries)} sentences)")
+
         if hook_end > hook_start:
             segments.append({"start": hook_start, "end": hook_end})
         if hook_start > 0.001:
@@ -535,8 +555,18 @@ async def _run_pipeline(job_id: str, preview_mode: bool = False):
         # Step 1: Detect silence
         job_store.update(job_id, status="processing", step="detecting_silence",
                          message="Detecting silence...", progress=10)
-        silence_data = await remotion_client.detect_silence(original_url)
+        silence_data = await remotion_client.detect_silence(original_url, min_duration=0.4)
         print(f"[JOB {job_id}] Silence detected: {len(silence_data['silentParts'])} silent parts")
+
+        # Trim leading silence: if the video starts with a short quiet gap
+        # that the detector missed (< 0.5s), inject a synthetic silent part
+        # so Remotion removes it. Only affects the leading edge.
+        sparts = silence_data["silentParts"]
+        if sparts:
+            earliest = min(sp["startFrame"] for sp in sparts)
+            if 0 < earliest <= int(0.5 * silence_data["fps"]):
+                print(f"[JOB {job_id}] Trimming leading silence: frames 0-{earliest}")
+                sparts.append({"startFrame": 0, "endFrame": earliest})
 
         # Compute audible segments (inverted silence) in the clean video timeline
         audible_segments = _compute_audible_segments(silence_data)
