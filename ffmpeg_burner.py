@@ -125,20 +125,13 @@ def burn_captions(
             f.write(srt_content)
 
         if fontsdir:
-            vf = f"subtitles='{srt_filename}':fontsdir='{fontsdir}':force_style='{force_style}'"
+            vf = f"subtitles={srt_filename}:fontsdir={fontsdir}:force_style='{force_style}'"
         else:
-            vf = f"subtitles='{srt_filename}':force_style='{force_style}'"
+            vf = f"subtitles={srt_filename}:force_style='{force_style}'"
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", video_path,
-            "-vf", vf,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "18",
-            "-c:a", "copy",
-            output_path,
-        ]
+        video_abs = os.path.abspath(video_path)
+        output_abs = os.path.abspath(output_path)
+        cmd = f'ffmpeg -y -i "{video_abs}" -vf "{vf}" -c:v libx264 -preset fast -crf 18 -c:a copy "{output_abs}"'
 
         # Debug logging
         print(f"[FFmpeg] Burning captions: {len(captions)} chunks, font={font_name}")
@@ -149,9 +142,10 @@ def burn_captions(
         srt_preview = srt_content.split("\n")[:5]
         print(f"[FFmpeg] SRT first 5 lines: {srt_preview}")
         print(f"[FFmpeg] -vf: {vf}")
-        print(f"[FFmpeg] Full command: {' '.join(cmd)}")
+        print(f"[FFmpeg] Full command: {cmd}")
         result = subprocess.run(
             cmd,
+            shell=True,
             capture_output=True,
             text=True,
             timeout=600,
