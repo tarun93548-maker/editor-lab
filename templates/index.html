@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editor Lab</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Bebas+Neue&family=Poppins:wght@600&family=Dancing+Script:wght@700&family=Oswald:wght@500&family=Permanent+Marker&family=Abril+Fatface&family=Quicksand:wght@600&family=Lobster&family=Lora&family=Inter:wght@400;500;600;700;800&family=Montserrat&family=DM+Sans&family=Nunito&family=Raleway:wght@700&family=Outfit&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -515,6 +515,113 @@
             border-radius: 6px;
         }
 
+        /* Render status badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .status-queued {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-muted);
+        }
+        .status-rendering {
+            background: var(--accent-dim);
+            color: var(--accent);
+            animation: pulse-render 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse-render {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .status-done {
+            color: var(--success);
+        }
+        .status-failed {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+        .var-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Caption style picker */
+        .style-picker-wrap {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .style-picker-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .style-picker {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--card-border) transparent;
+        }
+        .style-picker::-webkit-scrollbar { height: 4px; }
+        .style-picker::-webkit-scrollbar-track { background: transparent; }
+        .style-picker::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 2px; }
+        .style-chip {
+            flex-shrink: 0;
+            padding: 10px 18px;
+            background: var(--bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            color: var(--text-dim);
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .style-chip:hover {
+            border-color: var(--text-dim);
+            color: var(--text);
+        }
+        .style-chip.selected {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+        .start-render-btn {
+            display: block;
+            width: 100%;
+            max-width: 320px;
+            margin: 20px auto 0;
+            padding: 14px 24px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: var(--radius);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .start-render-btn:hover { opacity: 0.9; }
+        .start-render-btn:active { transform: scale(0.98); }
+        .start-render-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
         /* Transcript toggle */
         .transcript-section {
             background: var(--card);
@@ -660,6 +767,8 @@
             </div>
         </div>
 
+        <div id="style-picker-container"></div>
+
         <button class="process-btn" id="process-btn" disabled>Process Video &rarr;</button>
     </section>
 
@@ -728,6 +837,6 @@
         </div>
     </section>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
 </body>
 </html>

@@ -70,6 +70,7 @@ async def render_variation(
     fps: float = 30,
     width: int = 1080,
     height: int = 1920,
+    caption_style: str = "Georgia",
 ) -> Dict[str, Any]:
     """Render a hook variation with captions via the Remotion service."""
     return await _post("/api/render-variation", {
@@ -79,6 +80,7 @@ async def render_variation(
         "fps": fps,
         "width": width,
         "height": height,
+        "captionStyle": caption_style,
     }, timeout=RENDER_TIMEOUT)
 
 

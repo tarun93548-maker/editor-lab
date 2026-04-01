@@ -15,7 +15,7 @@ Your job is to analyze a video transcript and generate hook variation scripts by
 2. NEVER cut mid-sentence — cuts happen only at sentence boundaries.
 3. The "why" (core message) must survive in EVERY variation. If the viewer doesn't get the full message, the variation is invalid.
 4. Check if content is sequential/dependent first — if each sentence builds on the previous to form the argument, only trim the opener or cold-open on one line then resume from the top. Do NOT reorder dependent content.
-5. Generate MINIMUM 2, MAXIMUM 5 variations. Only include a variation if it genuinely improves the hook — don't force types that don't fit the content.
+5. Generate the number of variations specified in the user message. Always aim for the maximum count given — include AS_IS plus as many strong hook variations as specified.
 
 ## SEQUENTIAL/DEPENDENT CHECK:
 Ask: would removing or reordering early sentences make later ones confusing or unearned?
@@ -92,7 +92,7 @@ Ask: would removing or reordering early sentences make later ones confusing or u
 ## RANKING — this order matters:
 Rank variations by impact — strongest hook first, AS_IS always last.
 Only include variations you're confident will outperform the original.
-Minimum 2, maximum 5."""
+Generate the number of variations specified in the user message."""
 
 
 def _strip_markdown(raw: str) -> str:
@@ -150,12 +150,27 @@ def _call_and_parse(user_msg: str, retries: int = 1):
             raise RuntimeError(f"Failed to parse hook variations JSON after {1 + retries} attempts: {e}")
 
 
-def generate_hook_variations(transcript: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _max_variations(duration_sec: float) -> int:
+    """Return max variation count based on video duration."""
+    if duration_sec <= 30:
+        return 3
+    elif duration_sec <= 40:
+        return 4
+    else:
+        return 5
+
+
+def generate_hook_variations(transcript: Dict[str, Any], duration_sec: float = None) -> List[Dict[str, Any]]:
     sentences = transcript["sentences"]
     numbered = "\n".join(
         f"[{i}] ({s['start']}s–{s['end']}s) {s['text']}"
         for i, s in enumerate(sentences)
     )
+
+    if duration_sec is None:
+        duration_sec = sentences[-1]["end"] if sentences else 60
+    max_vars = _max_variations(duration_sec)
+    print(f"[HOOK_GEN] Duration: {duration_sec:.1f}s -> max_variations: {max_vars}")
 
     user_msg = f"""Transcript sentences with timestamps:
 
@@ -164,7 +179,10 @@ def generate_hook_variations(transcript: Dict[str, Any]) -> List[Dict[str, Any]]
 Full text:
 {transcript['text']}
 
-Analyze the content structure first, then generate hook variations (min 2, max 5).
+Video duration: {duration_sec:.1f}s
+
+Analyze the content structure first, then generate EXACTLY {max_vars} hook variations (including AS_IS as one of them).
+You MUST generate {max_vars} variations total. Use different hook types for each — AS_IS counts as one.
 Rank by impact — strongest hook first, AS_IS always last. Only use sentences from the transcript above."""
 
     result = _call_and_parse(user_msg)

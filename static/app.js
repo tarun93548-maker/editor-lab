@@ -32,10 +32,33 @@
   const errorMessage = document.getElementById("error-message");
   const errorRetryBtn = document.getElementById("error-retry-btn");
 
+  const stylePickerContainer = document.getElementById("style-picker-container");
+
+  const CAPTION_STYLES = [
+    { name: "Georgia", family: "Georgia, serif" },
+    { name: "Playfair Display", family: "'Playfair Display', serif" },
+    { name: "Bebas Neue", family: "'Bebas Neue', sans-serif", uppercase: true },
+    { name: "Poppins", family: "'Poppins', sans-serif" },
+    { name: "Dancing Script", family: "'Dancing Script', cursive" },
+    { name: "Oswald", family: "'Oswald', sans-serif", uppercase: true },
+    { name: "Permanent Marker", family: "'Permanent Marker', cursive" },
+    { name: "Abril Fatface", family: "'Abril Fatface', serif" },
+    { name: "Quicksand", family: "'Quicksand', sans-serif" },
+    { name: "Lobster", family: "'Lobster', cursive" },
+    { name: "Lora", family: "'Lora', serif" },
+    { name: "Inter", family: "'Inter', sans-serif" },
+    { name: "Montserrat", family: "'Montserrat', sans-serif" },
+    { name: "DM Sans", family: "'DM Sans', sans-serif" },
+    { name: "Nunito", family: "'Nunito', sans-serif" },
+    { name: "Raleway", family: "'Raleway', sans-serif" },
+    { name: "Outfit", family: "'Outfit', sans-serif" },
+  ];
+
   let selectedFile = null;
   let currentJobId = null;
   let pollTimer = null;
   let previewMode = false;
+  let selectedCaptionStyle = "Georgia";
 
   // --- Preview Mode Toggle ---
 
@@ -105,6 +128,7 @@
       return;
     }
     formData.append("preview_mode", previewMode ? "true" : "false");
+    formData.append("caption_style", selectedCaptionStyle);
 
     try {
       const res = await fetch("/upload", { method: "POST", body: formData });
@@ -147,7 +171,11 @@
         return;
       }
 
-      if (job.status === "awaiting_selection") {
+      if (job.status === "rendering_all" || job.status === "rendering") {
+        renderResults(job);
+        showSection("results");
+        pollTimer = setTimeout(pollStatus, 2000);
+      } else if (job.status === "complete") {
         pollTimer = null;
         renderResults(job);
         showSection("results");
@@ -273,69 +301,103 @@
 
   // --- Results ---
 
+  let cardsBuilt = false;
+
   function renderResults(job) {
-    variationsGrid.innerHTML = "";
     const variations = job.variations || [];
+    const renders = job.renders || {};
 
-    variations.forEach((v) => {
-      const card = document.createElement("div");
-      card.className = "var-card";
-      const varId = v.id;
-
-      const hookLabel = (v.hook_type || "").replace(/_/g, " ");
-      const scriptHtml = buildScriptHtml(v.script);
-      const previewHtml = buildPreview(v.script);
-
-      let whyHtml = "";
-      (v.why_it_works || []).forEach((w) => {
-        whyHtml += `<li class="why-item">${esc(w)}</li>`;
-      });
-
-      card.innerHTML = `
-        <div class="var-card-header">
-          <div class="var-num">${varId}</div>
-          <div class="var-title">${esc(v.name)}</div>
-          <span class="hook-badge">${esc(hookLabel)}</span>
-        </div>
-        <div class="var-card-body">
-          <div class="var-strategy">${esc(v.strategy)}</div>
-          <div class="var-preview">${previewHtml}</div>
-          <button class="expand-btn" data-var-id="${varId}">+ Show full script</button>
-          <div class="script-full" data-script-id="${varId}">
-            <ul class="script-list">${scriptHtml}</ul>
-            ${whyHtml ? `<ul class="why-list">${whyHtml}</ul>` : ""}
-          </div>
-          <div class="var-actions" data-var-id="${varId}">
-            <button class="render-btn" data-render-id="${varId}">Render This &rarr;</button>
-          </div>
-        </div>`;
-
-      variationsGrid.appendChild(card);
+    // Sort AS_IS last (defensive — backend already sorts)
+    const sorted = [...variations].sort((a, b) => {
+      const aIs = a.hook_type === "AS_IS" ? 1 : 0;
+      const bIs = b.hook_type === "AS_IS" ? 1 : 0;
+      return aIs - bIs;
     });
 
-    // Bind expand buttons
-    variationsGrid.querySelectorAll(".expand-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const vid = btn.getAttribute("data-var-id");
-        const full = variationsGrid.querySelector(
-          `.script-full[data-script-id="${vid}"]`
-        );
-        if (full.classList.contains("expanded")) {
-          full.classList.remove("expanded");
-          btn.textContent = "+ Show full script";
-        } else {
-          full.classList.add("expanded");
-          btn.textContent = "\u2212 Hide full script";
-        }
-      });
-    });
+    // Build cards once, then only update status areas on subsequent calls
+    if (!cardsBuilt) {
+      variationsGrid.innerHTML = "";
 
-    // Bind render buttons
-    variationsGrid.querySelectorAll(".render-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const vid = parseInt(btn.getAttribute("data-render-id"), 10);
-        doRender(vid, btn);
+      sorted.forEach((v) => {
+        const card = document.createElement("div");
+        card.className = "var-card";
+        card.setAttribute("data-card-id", v.id);
+        const varId = v.id;
+
+        const hookLabel = (v.hook_type || "").replace(/_/g, " ");
+        const scriptHtml = buildScriptHtml(v.script);
+        const previewHtml = buildPreview(v.script);
+
+        let whyHtml = "";
+        (v.why_it_works || []).forEach((w) => {
+          whyHtml += `<li class="why-item">${esc(w)}</li>`;
+        });
+
+        card.innerHTML = `
+          <div class="var-card-header">
+            <div class="var-num">${varId}</div>
+            <div class="var-title">${esc(v.name)}</div>
+            <span class="hook-badge">${esc(hookLabel)}</span>
+          </div>
+          <div class="var-card-body">
+            <div class="var-strategy">${esc(v.strategy)}</div>
+            <div class="var-preview">${previewHtml}</div>
+            <button class="expand-btn" data-var-id="${varId}">+ Show full script</button>
+            <div class="script-full" data-script-id="${varId}">
+              <ul class="script-list">${scriptHtml}</ul>
+              ${whyHtml ? `<ul class="why-list">${whyHtml}</ul>` : ""}
+            </div>
+            <div class="var-actions" data-var-id="${varId}"></div>
+          </div>`;
+
+        variationsGrid.appendChild(card);
       });
+
+      // Bind expand buttons
+      variationsGrid.querySelectorAll(".expand-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const vid = btn.getAttribute("data-var-id");
+          const full = variationsGrid.querySelector(
+            `.script-full[data-script-id="${vid}"]`
+          );
+          if (full.classList.contains("expanded")) {
+            full.classList.remove("expanded");
+            btn.textContent = "+ Show full script";
+          } else {
+            full.classList.add("expanded");
+            btn.textContent = "\u2212 Hide full script";
+          }
+        });
+      });
+
+      cardsBuilt = true;
+    }
+
+    // Update status areas for each variation
+    sorted.forEach((v) => {
+      const varId = String(v.id);
+      const actionsDiv = variationsGrid.querySelector(
+        `.var-actions[data-var-id="${varId}"]`
+      );
+      if (!actionsDiv) return;
+
+      const renderInfo = renders[varId] || { status: "queued" };
+      const status = renderInfo.status || "queued";
+
+      if (status === "done" && renderInfo.filename) {
+        actionsDiv.innerHTML =
+          `<span class="status-badge status-done">\u2713 Done</span>` +
+          `<a class="download-btn" href="/download/${currentJobId}/${renderInfo.filename}" download>&#11015; Download MP4</a>`;
+      } else if (status === "rendering") {
+        actionsDiv.innerHTML =
+          `<span class="status-badge status-rendering">\u25CF Rendering...</span>`;
+      } else if (status === "failed") {
+        actionsDiv.innerHTML =
+          `<span class="status-badge status-failed">\u2717 Failed</span>`;
+      } else {
+        actionsDiv.innerHTML =
+          `<span class="status-badge status-queued">\u25CB Queued</span>`;
+      }
     });
 
     // Transcript
@@ -345,44 +407,32 @@
     }
   }
 
-  // --- Render on demand ---
+  // --- Caption Style Picker (on upload page) ---
 
-  async function doRender(variationId, btn) {
-    if (!currentJobId) return;
+  function buildStylePicker() {
+    let chipsHtml = "";
+    CAPTION_STYLES.forEach((s) => {
+      const sel = s.name === selectedCaptionStyle ? " selected" : "";
+      const uc = s.uppercase ? "; text-transform: uppercase" : "";
+      chipsHtml += `<div class="style-chip${sel}" data-style="${esc(s.name)}" style="font-family: ${s.family}${uc}">${esc(s.name)}</div>`;
+    });
 
-    btn.disabled = true;
-    btn.classList.add("rendering");
-    btn.textContent = "Rendering...";
+    stylePickerContainer.innerHTML = `
+      <div class="style-picker-wrap">
+        <div class="style-picker-label">Caption Style (optional)</div>
+        <div class="style-picker">${chipsHtml}</div>
+      </div>`;
 
-    const actionsDiv = btn.closest(".var-actions");
-
-    try {
-      const res = await fetch(`/select-variation/${currentJobId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variation_index: variationId }),
+    stylePickerContainer.querySelectorAll(".style-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        stylePickerContainer.querySelectorAll(".style-chip").forEach((c) => c.classList.remove("selected"));
+        chip.classList.add("selected");
+        selectedCaptionStyle = chip.getAttribute("data-style");
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Render failed");
-      }
-      const result = await res.json();
-
-      actionsDiv.innerHTML =
-        `<span class="done-badge">\u2713 Done</span>` +
-        `<a class="download-btn" href="/download/${currentJobId}/${result.filename}" download>&#11015; Download MP4</a>`;
-    } catch (e) {
-      actionsDiv.innerHTML =
-        `<div class="var-error">${esc(e.message)}</div>` +
-        `<button class="render-btn" data-render-id="${variationId}" style="margin-top:8px">Retry Render &rarr;</button>`;
-      const retry = actionsDiv.querySelector(".render-btn");
-      if (retry) {
-        retry.addEventListener("click", () => {
-          doRender(variationId, retry);
-        });
-      }
-    }
+    });
   }
+
+  buildStylePicker();
 
   // Transcript toggle
   transcriptToggle.addEventListener("click", () => {
@@ -414,6 +464,9 @@
   function resetAll() {
     currentJobId = null;
     selectedFile = null;
+    cardsBuilt = false;
+    selectedCaptionStyle = "Georgia";
+    buildStylePicker();
     if (pollTimer) {
       clearTimeout(pollTimer);
       pollTimer = null;

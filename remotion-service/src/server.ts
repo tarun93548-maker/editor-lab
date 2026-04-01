@@ -177,6 +177,7 @@ app.post("/api/render-silence-removed", async (req, res) => {
         codec: "h264",
         outputLocation: tmpFile,
         inputProps,
+        timeoutInMilliseconds: 120_000,
       });
 
       const { key, url } = await uploadToR2(tmpFile, "clean");
@@ -248,6 +249,7 @@ app.post("/api/render-variation", async (req, res) => {
         codec: "h264",
         outputLocation: tmpFile,
         inputProps,
+        timeoutInMilliseconds: 120_000,
       });
 
       const { key, url } = await uploadToR2(tmpFile, "variations");

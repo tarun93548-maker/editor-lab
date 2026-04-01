@@ -22,6 +22,7 @@ import httpx
 import r2_storage
 import groq_transcriber
 import remotion_client
+import ffmpeg_burner
 
 
 def _compute_audible_segments(silence_data: Dict) -> List[Dict]:
@@ -119,10 +120,12 @@ async def upload_video(
     file: UploadFile = File(None),
     drive_url: str = Form(None),
     preview_mode: str = Form("false"),
+    caption_style: str = Form("Georgia"),
 ):
     job_id = str(uuid.uuid4())
     is_preview = preview_mode.lower() in ("true", "1", "yes")
     job_store.create(job_id)
+    job_store.update(job_id, caption_style=caption_style)
 
     if file and file.filename:
         ext = Path(file.filename).suffix.lower()
@@ -237,8 +240,14 @@ def _build_segments(variation: dict, job: dict) -> List[Dict]:
         body_start, _ = _clamp(script[0])
         segments.append({"start": body_start, "end": clean_end})
     else:
+        HOOK_END_PAD = 0.03  # 30ms breathing room for last word
         hook_entry = script[0]
         hook_start, hook_end = _clamp(hook_entry)
+        # Pad hook end so the last word isn't cut off by the silence boundary.
+        # Skip padding for the last sentence — it has natural trailing audio.
+        hook_sent_idx = hook_entry.get("sentence_index", 0)
+        if hook_sent_idx < len(all_sentences) - 1:
+            hook_end = min(hook_end + HOOK_END_PAD, clean_end)
         if hook_end > hook_start:
             segments.append({"start": hook_start, "end": hook_end})
         if hook_start > 0.001:
@@ -271,6 +280,8 @@ async def _render_one_variation(
         print(f"    seg[{i}] {seg['start']:.3f} -> {seg['end']:.3f} "
               f"({seg['end'] - seg['start']:.3f}s)")
 
+    caption_style = job.get("caption_style", "Georgia")
+
     try:
         # Pass 1: render without captions
         pass1 = await remotion_client.render_variation(
@@ -280,18 +291,86 @@ async def _render_one_variation(
 
         # Transcribe for synced captions
         transcript = await groq_transcriber.transcribe_from_url(nocap_url)
+
+        # --- Debug: Pass 2 transcription results ---
+        p2_sents = transcript.get("sentences", [])
+        p2_words = transcript.get("words", [])
+        p2_duration = p2_sents[-1]["end"] if p2_sents else 0
+        print(f"[JOB {job_id}] ===== PASS 2 TRANSCRIPTION RESULTS =====")
+        print(f"[JOB {job_id}]   Source: {nocap_url[:80]}...")
+        print(f"[JOB {job_id}]   Total duration: {p2_duration:.3f}s")
+        print(f"[JOB {job_id}]   Sentences ({len(p2_sents)}):")
+        for si, s in enumerate(p2_sents):
+            print(f"[JOB {job_id}]     sent[{si}] {s['start']:.3f}-{s['end']:.3f} \"{s['text'][:60]}\"")
+        print(f"[JOB {job_id}]   Words (first 20 of {len(p2_words)}):")
+        for wi, w in enumerate(p2_words[:20]):
+            print(f"[JOB {job_id}]     word[{wi}] {w['start']:.3f}-{w['end']:.3f} \"{w['word']}\"")
+        # --- End debug ---
+
         captions = groq_transcriber.build_caption_chunks(
             transcript["words"], transcript["sentences"]
         )
-        print(f"[JOB {job_id}]   Captions: {len(captions)} chunks")
 
-        # Pass 2: render with captions
-        pass2 = await remotion_client.render_variation(
-            clean_url, segments, captions=captions, fps=30
-        )
-        render_url = pass2["outputUrl"]
-        render_key = pass2["r2Key"]
-        filename = render_key.split("/")[-1] if "/" in render_key else render_key
+        # --- Debug: Caption chunks for pass 2 ---
+        print(f"[JOB {job_id}]   Caption chunks ({len(captions)}):")
+        for ci, c in enumerate(captions):
+            print(f"[JOB {job_id}]     chunk[{ci}] {c['start']:.3f}-{c['end']:.3f} \"{c['text']}\"")
+        print(f"[JOB {job_id}] ===== END TRANSCRIPTION =====")
+        # --- End debug ---
+
+        # Burn captions with FFmpeg (replaces Remotion pass 2)
+        tmp_nocap = os.path.join(tempfile.gettempdir(), f"{job_id}-{var_id}-nocap.mp4")
+        tmp_captioned = os.path.join(tempfile.gettempdir(), f"{job_id}-{var_id}-captioned.mp4")
+
+        try:
+            # Download pass 1 video from R2 (retry up to 3 times —
+            # R2 occasionally drops the connection before the full body
+            # is transferred on large files).
+            print(f"[JOB {job_id}]   Downloading pass 1 for FFmpeg...")
+            dl_ok = False
+            for dl_attempt in range(1, 4):
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as dl_client:
+                        dl_resp = await dl_client.get(nocap_url)
+                        dl_resp.raise_for_status()
+                        expected = dl_resp.headers.get("content-length")
+                        body = dl_resp.content
+                        if expected and len(body) != int(expected):
+                            raise IOError(
+                                f"Incomplete download: got {len(body)} bytes, "
+                                f"expected {expected}"
+                            )
+                        with open(tmp_nocap, "wb") as f:
+                            f.write(body)
+                    dl_ok = True
+                    break
+                except Exception as dl_err:
+                    print(f"[JOB {job_id}]   R2 download attempt {dl_attempt}/3 failed: {dl_err}")
+                    if dl_attempt < 3:
+                        await asyncio.sleep(2)
+            if not dl_ok:
+                raise RuntimeError("R2 download failed after 3 attempts")
+
+            # Burn captions via FFmpeg + ASS
+            font_cfg = ffmpeg_burner.get_font_config(caption_style)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, ffmpeg_burner.burn_captions,
+                tmp_nocap, captions, font_cfg, tmp_captioned,
+            )
+
+            # Upload captioned video to R2
+            r2_result = r2_storage.upload_file(tmp_captioned, prefix="variations")
+            render_url = r2_result["url"]
+            render_key = r2_result["key"]
+            filename = render_key.split("/")[-1] if "/" in render_key else render_key
+
+        finally:
+            for tmp in [tmp_nocap, tmp_captioned]:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
 
         print(f"[JOB {job_id}] Variation {var_idx + 1}/{total} complete: {render_url}")
         return {
@@ -543,10 +622,20 @@ async def _run_pipeline_post_silence(job_id: str, clean_url: str):
     job_store.update(job_id, step="generating_hooks",
                      message="Generating hook variations...", progress=70)
     loop = asyncio.get_event_loop()
-    variations = await loop.run_in_executor(None, generate_hook_variations, transcript)
+    variations = await loop.run_in_executor(None, generate_hook_variations, transcript, last_end)
     print(f"[JOB {job_id}] Hook generation complete: {len(variations)} variations")
 
-    job_store.update(job_id, variations=variations, progress=75)
+    # Sort variations so AS_IS renders last
+    variations.sort(key=lambda v: 1 if v.get("hook_type") == "AS_IS" else 0)
+
+    job_store.update(
+        job_id,
+        variations=variations,
+        progress=75,
+        status="rendering_all",
+        step="rendering",
+        message="Rendering all variations...",
+    )
 
     # Step 6: Auto-render all variations
     await _render_all_variations(job_id)
