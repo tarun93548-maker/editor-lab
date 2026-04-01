@@ -114,18 +114,20 @@ def burn_captions(
         f"Bold=0"
     )
 
-    # Write SRT to temp file
-    srt_fd, srt_path = tempfile.mkstemp(suffix=".srt", prefix="editorlab_")
+    # Write SRT to same directory as input video so we can reference
+    # it by bare filename — avoids Windows colon-in-path breaking
+    # FFmpeg's filter option parser.
+    video_dir = os.path.dirname(os.path.abspath(video_path))
+    srt_fd, srt_path = tempfile.mkstemp(suffix=".srt", prefix="editorlab_", dir=video_dir)
+    srt_filename = os.path.basename(srt_path)
     try:
         with os.fdopen(srt_fd, "w", encoding="utf-8") as f:
             f.write(srt_content)
 
-        srt_safe = _ffmpeg_path(srt_path)
-
         if fontsdir:
-            vf = f"subtitles='{srt_safe}':fontsdir='{fontsdir}':force_style='{force_style}'"
+            vf = f"subtitles='{srt_filename}':fontsdir='{fontsdir}':force_style='{force_style}'"
         else:
-            vf = f"subtitles='{srt_safe}':force_style='{force_style}'"
+            vf = f"subtitles='{srt_filename}':force_style='{force_style}'"
 
         cmd = [
             "ffmpeg", "-y",
@@ -138,12 +140,22 @@ def burn_captions(
             output_path,
         ]
 
+        # Debug logging
         print(f"[FFmpeg] Burning captions: {len(captions)} chunks, font={font_name}")
+        print(f"[FFmpeg] SRT file: {srt_path}")
+        print(f"[FFmpeg] SRT exists: {os.path.isfile(srt_path)}, size: {os.path.getsize(srt_path)} bytes")
+        print(f"[FFmpeg] SRT filename in filter: {srt_filename}")
+        print(f"[FFmpeg] cwd: {video_dir}")
+        srt_preview = srt_content.split("\n")[:5]
+        print(f"[FFmpeg] SRT first 5 lines: {srt_preview}")
+        print(f"[FFmpeg] -vf: {vf}")
+        print(f"[FFmpeg] Full command: {' '.join(cmd)}")
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=600,
+            cwd=video_dir,
         )
 
         if result.returncode != 0:
