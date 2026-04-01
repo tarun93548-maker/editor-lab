@@ -202,17 +202,33 @@ Rank by impact — strongest hook first, AS_IS always last. Only use sentences f
                 idx = seg.get("original_index")
                 start_ms = seg.get("start_ms")
                 end_ms = seg.get("end_ms")
-                # Convert ms to seconds for start/end
-                s = {
-                    "sentence_index": idx,
-                    "text": seg.get("text", ""),
-                    "start": start_ms / 1000 if start_ms is not None else seg.get("start", 0),
-                    "end": end_ms / 1000 if end_ms is not None else seg.get("end", 0),
-                    "section": seg.get("section", ""),
-                }
+                # Use actual transcript timestamps when we have a valid index —
+                # LLM sometimes returns wrong start_ms/end_ms for a sentence.
                 if idx is not None and 0 <= idx < len(sentences):
-                    s["words"] = sentences[idx].get("words", [])
-                    s["audible_segment_index"] = sentences[idx].get("audible_segment_index")
+                    actual = sentences[idx]
+                    s = {
+                        "sentence_index": idx,
+                        "text": actual["text"],
+                        "start": float(actual["start"]),
+                        "end": float(actual["end"]),
+                        "section": seg.get("section", ""),
+                        "words": actual.get("words", []),
+                        "audible_segment_index": actual.get("audible_segment_index"),
+                    }
+                    # Log if LLM timestamps disagree with transcript
+                    if start_ms is not None:
+                        llm_start = start_ms / 1000
+                        if abs(llm_start - s["start"]) > 0.1:
+                            print(f"  [HOOK_GEN] Timestamp mismatch for sentence[{idx}]: "
+                                  f"LLM={llm_start:.3f}s, actual={s['start']:.3f}s")
+                else:
+                    s = {
+                        "sentence_index": idx,
+                        "text": seg.get("text", ""),
+                        "start": start_ms / 1000 if start_ms is not None else seg.get("start", 0),
+                        "end": end_ms / 1000 if end_ms is not None else seg.get("end", 0),
+                        "section": seg.get("section", ""),
+                    }
                 script.append(s)
             v["script"] = script
         else:
