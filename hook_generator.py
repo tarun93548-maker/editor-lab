@@ -13,9 +13,36 @@ Your job is to analyze a video transcript and generate hook variation scripts by
 ## ABSOLUTE RULES — never break these:
 1. NEVER write new words — only use exact sentences from the transcript, verbatim.
 2. NEVER cut mid-sentence — cuts happen only at sentence boundaries.
-3. The "why" (core message) must survive in EVERY variation. If the viewer doesn't get the full message, the variation is invalid.
-4. Check if content is sequential/dependent first — if each sentence builds on the previous to form the argument, only trim the opener or cold-open on one line then resume from the top. Do NOT reorder dependent content.
-5. Generate the number of variations specified in the user message. Always aim for the maximum count given — include AS_IS plus as many strong hook variations as specified.
+3. The "why" (core message) must survive in EVERY variation.
+4. Check if content is sequential/dependent first — if each sentence builds on the previous, only trim the opener or cold-open on one line then resume from the top. Do NOT reorder dependent content.
+5. Generate the number of variations specified in the user message. AS_IS counts as one.
+
+## HOOK SELECTION RULES (STRICT — violating these makes the hook INVALID):
+1. Every hook MUST be a COMPLETE thought. Never cut a sentence mid-word or mid-thought. If someone heard ONLY the hook with zero context, it must make complete sense on its own.
+2. NEVER start a hook with conjunctions: "and", "but", "so", "or", "because", "which". These are continuations, not openers. If a sentence starts with one of these words, it CANNOT be a hook.
+3. NEVER end a hook with trailing conjunctions or incomplete phrases: "but honestly,", "and i", "so if". The hook must feel finished.
+4. A hook can be 1-3 sentences, but every sentence must be complete and self-contained.
+5. Use the exact original_index to reference sentences — the text and timestamps will be looked up from the transcript automatically.
+6. DO NOT include start_ms or end_ms — they are ignored. Only original_index matters.
+
+## WHAT MAKES A BAD HOOK (NEVER do these — automatic rejection):
+- Sentence fragments: "you do pilates or any kind of studio workouts i" — CUT OFF
+- Starting mid-conversation: "and cutesy not like your typical workout socks so if" — NO CONTEXT
+- Trailing hooks: "I feel way more stable during my workouts but honestly," — UNFINISHED
+- Generic statements with no curiosity gap: "This is a really good product" — BORING
+- Multiple unrelated sentences stitched together that don't flow naturally
+- Any sentence that REQUIRES the previous sentence to make sense
+- Sentences beginning with lowercase conjunctions (and, but, so, or, because)
+
+## HOOK PSYCHOLOGY (based on UGC ad science — apply these when selecting hooks):
+1. PATTERN INTERRUPT — violate the viewer's expectations in the first second. Counterintuitive statements, unexpected outcomes, bold claims.
+2. CURIOSITY GAP — create an information gap. Make them NEED to keep watching to close it.
+3. LOSS AVERSION — suggest not watching means missing something important. 2x more powerful than gain framing.
+4. IDENTITY TARGETING — speak directly to a specific audience. "If you do Pilates..." or "For anyone who..." creates ingroup feeling and immediate relevance.
+5. RESULT-FIRST — lead with the outcome/transformation. "I am obsessed." "This changed everything." "Best purchase I've made." Short, emotional, definitive.
+6. CONTRAST PRINCIPLE — "Most people do X, but this..." positions the content as a superior alternative.
+7. SOCIAL PROOF THROUGH IMPLICATION — "What I discovered..." "The thing nobody talks about..." implies insider knowledge.
+8. SPECIFICITY — concrete details (materials, numbers, sensations) signal real knowledge and credibility.
 
 ## SEQUENTIAL/DEPENDENT CHECK:
 Ask: would removing or reordering early sentences make later ones confusing or unearned?
@@ -23,30 +50,22 @@ Ask: would removing or reordering early sentences make later ones confusing or u
 - NO → sentences can be reordered freely as long as message stays coherent.
 
 ## VARIATION TYPES (use the exact type names):
-- AS_IS: Original order. Always include this. Must be ranked LAST (it's the fallback).
-- TRIM_OPENER: Remove 1-2 intro/filler sentences, start deeper.
-- COLD_OPEN_PAYOFF: Lead with the result/transformation line, then cut to beginning and play through.
-- COLD_OPEN_PROBLEM: Lead with the pain/problem sentence, then play through.
-- COLD_OPEN_SOCIAL_PROOF: Lead with a compliment or third-party validation line, then play through.
-- COLD_OPEN_IDENTITY: Lead with a "this is so me" or ingroup targeting line, then play through.
-- COLD_OPEN_DIFFERENTIATOR: Lead with what makes the product unique, then play through.
-- COLD_OPEN_FEELING: Lead with an emotional/sensory line, then play through.
-- COLD_OPEN_RESULT: Lead with a specific outcome or stat, then play through.
-
-## HOOK PSYCHOLOGY — reference these in why_it_works:
-- Pattern interrupt: violates what the brain expects in first 1.5s — increases watch time
-- Curiosity gap: creates information asymmetry — viewer must keep watching to close it
-- Loss aversion: "not watching = missing out" is 2x more powerful than gain framing
-- Mystery loop: opens an unresolved question that pulls the viewer forward
-- Tension loop: introduces conflict or stakes that demand resolution
-- Transformation loop: shows before/after or change that viewers want to witness
-- Identity targeting: ingroup signals ("Pilates girls, you'll get it") increase retention from the right viewer
-- Specificity: concrete details (materials, numbers, sensations) signal real knowledge and credibility
+- AS_IS: Original order. Always include this. Must be ranked LAST.
+- TRIM_OPENER: Remove 1-2 intro/filler sentences, start deeper into the content.
+- COLD_OPEN_PAYOFF: Lead with the emotional result/transformation. Best for "I am obsessed", "This changed my life", "Best thing I've ever bought".
+- COLD_OPEN_IDENTITY: Target the audience directly. "If you do Pilates...", "For anyone who struggles with...". Creates immediate relevance.
+- COLD_OPEN_RESULT: Lead with a specific measurable outcome or benefit.
+- COLD_OPEN_CURIOSITY: Create a mystery or information gap. "The one thing nobody tells you about..."
+- COLD_OPEN_CONTRAST: Set up what's common then introduce the unexpected. "Everyone says X but actually..."
+- COLD_OPEN_PROBLEM: Lead with the pain/problem sentence.
+- COLD_OPEN_SOCIAL_PROOF: Lead with a compliment or third-party validation line.
+- COLD_OPEN_FEELING: Lead with an emotional/sensory line.
 
 ## ANALYSIS STEP — do this FIRST before generating variations:
 1. Determine if the content is sequential/dependent (is_sequential: true/false)
 2. Identify the "why" statement — the core message that must survive
 3. Assign a role to each sentence: hook, intro, problem, product, benefit, social_proof, cta, payoff
+4. For each sentence, note whether it could work as a standalone hook (yes/no and why)
 
 ## OUTPUT FORMAT — return ONLY valid JSON, no markdown, no preamble:
 
@@ -55,24 +74,27 @@ Ask: would removing or reordering early sentences make later ones confusing or u
     "is_sequential": true,
     "why_statement": "The core message/argument of the video in one sentence",
     "sentence_roles": [
-      {"index": 0, "role": "hook", "text": "exact sentence text"}
+      {"index": 0, "role": "hook", "text": "exact sentence text", "standalone_hook": true, "reason": "Complete thought, strong emotion"}
     ]
   },
   "variations": [
     {
       "id": 1,
       "name": "Descriptive Name",
-      "hook_type": "AS_IS",
+      "hook_type": "COLD_OPEN_PAYOFF",
       "strategy": "One sentence explaining the strategic logic.",
       "why_it_works": ["Pattern interrupt: violates expectation by...", "Curiosity gap: viewer needs to know..."],
-      "sentence_order": [0, 1, 2, 3],
+      "sentence_order": [4, 0, 1, 2, 3, 5, 6],
       "sentences": [
         {
-          "original_index": 0,
+          "original_index": 4,
           "text": "exact sentence text copied verbatim",
-          "start_ms": 0,
-          "end_ms": 2400,
           "section": "hook"
+        },
+        {
+          "original_index": 0,
+          "text": "exact sentence text",
+          "section": "intro"
         }
       ]
     }
@@ -80,7 +102,7 @@ Ask: would removing or reordering early sentences make later ones confusing or u
 }
 
 ## SECTION LABELS — assign one per sentence:
-- hook: the opening line designed to stop the scroll
+- hook: the opening line(s) designed to stop the scroll
 - intro: introduces the creator or sets context
 - problem: describes the pain point or issue
 - product: names or describes the product
@@ -89,10 +111,11 @@ Ask: would removing or reordering early sentences make later ones confusing or u
 - cta: call to action ("go get these", "link in bio")
 - payoff: the final result, transformation, or emotional conclusion
 
-## RANKING — this order matters:
-Rank variations by impact — strongest hook first, AS_IS always last.
-Only include variations you're confident will outperform the original.
-Generate the number of variations specified in the user message."""
+## QUALITY OVER QUANTITY:
+- Only generate hooks that are genuinely GOOD. If you can only find 2 great hooks in a 50s video, generate 2 + AS_IS. Don't fill the quota with bad hooks.
+- Rank variations by impact — strongest hook first, AS_IS always last.
+- Every non-AS_IS variation must clearly outperform the original opening.
+- Apply at least one hook psychology principle to each variation and explain it in why_it_works."""
 
 
 def _strip_markdown(raw: str) -> str:
@@ -181,9 +204,16 @@ Full text:
 
 Video duration: {duration_sec:.1f}s
 
-Analyze the content structure first, then generate EXACTLY {max_vars} hook variations (including AS_IS as one of them).
-You MUST generate {max_vars} variations total. Use different hook types for each — AS_IS counts as one.
-Rank by impact — strongest hook first, AS_IS always last. Only use sentences from the transcript above."""
+Generate up to {max_vars} hook variations (including AS_IS as one of them).
+
+CRITICAL REMINDERS:
+- Every hook must be a COMPLETE thought — no fragments, no trailing conjunctions, no mid-sentence cuts.
+- Never start a hook with: and, but, so, or, because, which.
+- Only use original_index to reference sentences. Do NOT include start_ms or end_ms.
+- Quality over quantity: if only 2 hooks are genuinely good, generate 2 + AS_IS. Don't force bad hooks.
+- Apply hook psychology (pattern interrupt, curiosity gap, identity targeting, result-first) to each variation.
+- Rank by impact — strongest hook first, AS_IS always last.
+- Only use sentences from the transcript above."""
 
     result = _call_and_parse(user_msg)
 
